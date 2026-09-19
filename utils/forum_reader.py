@@ -1,65 +1,62 @@
-"""Compatibility reader backed by Redis Streams when enabled.
+"""消息总线读取工具，不再读取 forum.log。"""
 
-Existing SummaryNodes can continue calling get_latest_host_speech(). During the
-migration, consensus/host_summary messages are preferred and forum.log remains
-a safe fallback when Redis is unavailable.
-"""
+from __future__ import annotations
 
 import asyncio
 import os
-import re
-from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
-from loguru import logger
+from messaging import RedisStreamBus
 
 
-def _latest_bus_summary(task_id: Optional[str] = None) -> Optional[str]:
-    if os.getenv("MESSAGE_BUS_ENABLED", "0").lower() not in {"1", "true", "yes"}:
-        return None
+def _read_messages(task_id: Optional[str] = None) -> List[Any]:
+    task = task_id or os.getenv("BETTAFISH_TASK_ID", "default")
+    topic = f"bettafish:{task}:events"
+
+    async def read() -> List[Any]:
+        bus = RedisStreamBus()
+        rows = await bus._redis.xrevrange(topic, count=20)
+        messages = []
+        for _, fields in reversed(rows):
+            payload = fields.get("payload")
+            if payload:
+                messages.append(__import__("messaging").AgentMessage.from_payload(payload))
+        return messages
+
     try:
-        from messaging import RedisStreamBus
-
-        async def read():
-            message = await RedisStreamBus().latest(
-                f"bettafish:{task_id or os.getenv('BETTAFISH_TASK_ID', 'default')}:events"
-            )
-            if message and message.message_type in {"consensus", "host_summary"}:
-                return message.content.get("text") or message.content.get("summary")
-            return None
-
         return asyncio.run(read())
-    except Exception as exc:
-        logger.debug(f"消息总线不可用，回退到forum.log: {exc}")
-        return None
+    except Exception:
+        return []
 
 
-def get_latest_host_speech(log_dir: str = "logs") -> Optional[str]:
-    bus_summary = _latest_bus_summary()
-    if bus_summary:
-        return bus_summary
-    path = Path(log_dir) / "forum.log"
-    try:
-        if not path.exists():
-            return None
-        with open(path, "r", encoding="utf-8", errors="ignore") as file:
-            for line in reversed(file.readlines()):
-                match = re.match(r"\[(\d{2}:\d{2}:\d{2})\]\s*\[HOST\]\s*(.+)", line)
-                if match:
-                    return match.group(2).replace("\\n", "\n").strip()
-    except Exception as exc:
-        logger.error(f"读取协作上下文失败: {exc}")
+def get_recent_agent_messages(task_id: Optional[str] = None, limit: int = 5) -> List[Dict[str, Any]]:
+    messages = _read_messages(task_id)
+    return [
+        {
+            "message_id": message.message_id,
+            "sender": message.sender,
+            "message_type": message.message_type,
+            "content": message.content,
+            "confidence": message.confidence,
+            "round_id": message.round_id,
+        }
+        for message in messages[-limit:]
+    ]
+
+
+def get_latest_consensus(task_id: Optional[str] = None) -> Optional[str]:
+    for message in reversed(_read_messages(task_id)):
+        if message.message_type in {"consensus", "host_summary"}:
+            return message.content.get("text") or message.content.get("summary")
     return None
 
 
-def format_host_speech_for_prompt(host_speech: str) -> str:
-    if not host_speech:
+def get_latest_host_speech(*args: Any, **kwargs: Any) -> Optional[str]:
+    """Compatibility name; returns consensus messages, never forum.log content."""
+    return get_latest_consensus()
+
+
+def format_host_speech_for_prompt(summary: str) -> str:
+    if not summary:
         return ""
-    return f"""
-### 最新协作上下文
-以下内容来自消息总线中的共识/主持人摘要，请作为参考，不要盲目接受：
-
-{host_speech}
-
----
-"""
+    return f"\n### 最新协作共识（来自消息总线）\n{summary}\n---\n"
