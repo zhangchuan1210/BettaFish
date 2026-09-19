@@ -1,7 +1,15 @@
-"""
-ForumEngine - 监控和记录三个Engine的SummaryNode和ReportFormattingNode输出
+"""Agent event bridge package.
+
+ForumHost and forum.log are intentionally not part of the collaboration API.
+Use ``messaging.RedisStreamBus`` and ``coordination.agent_events`` for all
+inter-agent communication.
 """
 
-from .monitor import LogMonitor
+from .monitor import LogMonitor, get_monitor, start_forum_monitoring, stop_forum_monitoring
 
-__all__ = ['LogMonitor']
+__all__ = [
+    "LogMonitor",
+    "get_monitor",
+    "start_forum_monitoring",
+    "stop_forum_monitoring",
+]

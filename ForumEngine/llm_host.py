@@ -1,9 +1,10 @@
-"""ForumHost has been removed.
+"""Removed legacy ForumHost implementation.
 
-Agent collaboration is now performed through structured Redis Streams messages.
-Use ``messaging.AgentMessage`` and ``RedisStreamBus`` instead.
+This module is retained only as a migration marker so stale imports fail with a
+clear message. It must not be used for runtime collaboration.
 """
 
-raise ImportError(
-    "ForumHost/forum.log communication was removed; use the messaging package"
+raise RuntimeError(
+    "ForumHost was removed. Use messaging.RedisStreamBus and "
+    "coordination.agent_events instead."
 )
