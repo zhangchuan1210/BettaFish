@@ -3,13 +3,16 @@ version: "3.9"
 services:
   bettafish:
     image: ghcr.io/666ghj/bettafish:latest
-    # Speed up mirror
-    # image: ghcr.nju.edu.cn/666ghj/bettafish:latest
     container_name: bettafish
     restart: unless-stopped
     environment:
       - PYTHONUNBUFFERED=1
       - STREAMLIT_SERVER_ENABLE_FILE_WATCHER=false
+      - MESSAGE_BUS_ENABLED=${MESSAGE_BUS_ENABLED:-0}
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
     ports:
       - "5000:5000"
       - "8501:8501"
@@ -18,10 +21,36 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./final_reports:/app/final_reports
-      - ./.env:/app/.env  
+      - ./.env:/app/.env
       - ./insight_engine_streamlit_reports:/app/insight_engine_streamlit_reports
       - ./media_engine_streamlit_reports:/app/media_engine_streamlit_reports
       - ./query_engine_streamlit_reports:/app/query_engine_streamlit_reports
+
+  decentralized-monitor:
+    image: ghcr.io/666ghj/bettafish:latest
+    container_name: bettafish-decentralized-monitor
+    restart: unless-stopped
+    command: ["python", "-m", "ForumEngine.decentralized_monitor"]
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MESSAGE_BUS_ENABLED=${MESSAGE_BUS_ENABLED:-0}
+      - REDIS_URL=redis://redis:6379/0
+      - BETTAFISH_TASK_ID=${BETTAFISH_TASK_ID:-default}
+    depends_on:
+      - redis
+    volumes:
+      - ./logs:/app/logs
+      - ./.env:/app/.env
+
+  redis:
+    image: redis:7-alpine
+    container_name: bettafish-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
 
   db:
     image: postgres:15
@@ -30,8 +59,6 @@ services:
     env_file:
       - .env
     environment:
-      # Postgres 官方镜像只识别 POSTGRES_* 用于初始化；
-      # 而本项目的应用侧读取 DB_*（见 .env）。这里做一次映射，确保两边一致。
       POSTGRES_USER: ${DB_USER:-${POSTGRES_USER:-bettafish}}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-${POSTGRES_PASSWORD:-bettafish}}
       POSTGRES_DB: ${DB_NAME:-${POSTGRES_DB:-bettafish}}
@@ -39,3 +66,6 @@ services:
       - "${POSTGRES_PORT:-5444}:5432"
     volumes:
       - ./db_data:/var/lib/postgresql/data
+
+volumes:
+  redis_data:
