@@ -1,12 +1,18 @@
-"""
-Deep Search Agent
-一个无框架的深度搜索AI代理实现
-"""
+"""Query Agent public API."""
 
-from .agent import DeepSearchAgent, create_agent
+from .agent import DeepSearchAgent as _DeepSearchAgent, create_agent as _create_agent
 from .utils.config import Settings
+from coordination.message_driven import enable_message_driven
 
-__version__ = "1.0.0"
-__author__ = "Deep Search Agent Team"
+
+class DeepSearchAgent(_DeepSearchAgent):
+    """Query Agent with a Redis Streams inbox."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        enable_message_driven(self, "query")
+
+
+def create_agent(*args, **kwargs):
+    return DeepSearchAgent(*args, **kwargs)
 
 __all__ = ["DeepSearchAgent", "create_agent", "Settings"]

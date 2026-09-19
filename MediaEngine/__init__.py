@@ -1,12 +1,24 @@
-"""
-Deep Search Agent
-一个无框架的深度搜索AI代理实现
-"""
+"""Media Agent public API."""
 
-from .agent import DeepSearchAgent, AnspireSearchAgent, create_agent
+from .agent import DeepSearchAgent as _DeepSearchAgent, AnspireSearchAgent as _AnspireSearchAgent
+from .agent import create_agent as _create_agent
 from .utils.config import Settings
+from coordination.message_driven import enable_message_driven
 
-__version__ = "1.0.0"
-__author__ = "Deep Search Agent Team"
+
+class DeepSearchAgent(_DeepSearchAgent):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        enable_message_driven(self, "media")
+
+
+class AnspireSearchAgent(_AnspireSearchAgent):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        enable_message_driven(self, "media")
+
+
+def create_agent(*args, **kwargs):
+    return DeepSearchAgent(*args, **kwargs)
 
 __all__ = ["DeepSearchAgent", "AnspireSearchAgent", "create_agent", "Settings"]
